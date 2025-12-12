@@ -9,6 +9,14 @@ export interface Duration {
   days: number;
 }
 
+export interface CalculationItem {
+  id: string;
+  base: Duration;
+  fractionValue: number;
+  fractionLabel: string;
+  result: Duration;
+}
+
 export const durationSchema = z.object({
   years: z.coerce.number().min(0).default(0),
   months: z.coerce.number().min(0).default(0),
@@ -65,6 +73,17 @@ export function formatDuration(d: Duration): string {
   return parts.join(', ');
 }
 
+export function subtractDuration(total: Duration, toRemove: Duration): Duration {
+  const totalDays = toDays(total);
+  const removeDays = toDays(toRemove);
+  const resultDays = Math.max(0, totalDays - removeDays);
+  return fromDays(resultDays);
+}
+
+export function addDurations(d1: Duration, d2: Duration): Duration {
+    return fromDays(toDays(d1) + toDays(d2));
+}
+
 export function generateMemoryString(
   base: Duration,
   fractionLabel: string,
@@ -75,11 +94,55 @@ export function generateMemoryString(
   const resultStr = formatDuration(result);
   const operationStr = mode === 'soma' ? 'Soma/Progressão' : 'Remição/Detração';
 
-  return `MEMÓRIA DE CÁLCULO - ${operationStr.toUpperCase()}
+  let report = `MEMÓRIA DE CÁLCULO - ${operationStr.toUpperCase()}
 ----------------------------------------
 Pena Base: ${baseStr}
 Fração Aplicada: ${fractionLabel}
 ----------------------------------------
 Resultado: ${resultStr}
 `;
+
+  if (mode === 'subtracao') {
+    const remaining = subtractDuration(base, result);
+    report += `Tempo Restante: ${formatDuration(remaining)}\n`;
+  }
+
+  return report;
+}
+
+export function generateReport(items: CalculationItem[], mode: PenalMode): string {
+    const operationStr = mode === 'soma' ? 'Soma/Progressão' : 'Remição/Detração';
+    let report = `RELATÓRIO DE CÁLCULO - ${operationStr.toUpperCase()}\n`;
+    report += `----------------------------------------\n`;
+
+    let totalBaseDays = 0;
+    let totalResultDays = 0;
+
+    items.forEach((item, index) => {
+        const baseStr = formatDuration(item.base);
+        const resultStr = formatDuration(item.result);
+        totalBaseDays += toDays(item.base);
+        totalResultDays += toDays(item.result);
+
+        report += `#${index + 1} - Pena: ${baseStr} | Fração: ${item.fractionLabel}\n`;
+        report += `    Resultado Parcial: ${resultStr}\n`;
+        if (index < items.length - 1) report += `\n`;
+    });
+
+    const totalBase = fromDays(totalBaseDays);
+    const totalResult = fromDays(totalResultDays);
+
+    report += `----------------------------------------\n`;
+    report += `TOTAL GERAL\n`;
+    if (items.length > 1) {
+         report += `Soma das Penas Base: ${formatDuration(totalBase)}\n`;
+    }
+    report += `Resultado Total: ${formatDuration(totalResult)}\n`;
+
+    if (mode === 'subtracao') {
+        const remaining = subtractDuration(totalBase, totalResult);
+        report += `Tempo Restante: ${formatDuration(remaining)}\n`;
+    }
+
+    return report;
 }
