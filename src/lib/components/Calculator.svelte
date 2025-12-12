@@ -8,8 +8,15 @@
     generateReport,
     subtractDuration,
     toDays,
-    fromDays
+    fromDays,
+    progressionOptions,
+    calculateDate,
+    calculateEndDate
   } from '$lib/logic/calculator';
+  import {
+    calculateDosimetry,
+    type DosimetryOperation
+  } from '$lib/logic/dosimetry';
   import {
     type MinimumWage,
     getMinimumWage,
@@ -18,16 +25,59 @@
   } from '$lib/logic/fine';
 
   // Svelte 5 Runes
-  let activeTab = $state<'execution' | 'fine' | 'remission'>('execution');
-
-  // Execution State
-  let years = $state(0);
-  let months = $state(0);
-  let days = $state(0);
-  let selectedFractionValue = $state(1);
-  let mode = $state<'soma' | 'subtracao'>('soma');
+  let activeTab = $state<'execution' | 'fine' | 'remission' | 'dosimetry'>('execution');
   let copied = $state(false);
-  let items = $state<CalculationItem[]>([]);
+
+  // Execution State (New)
+  let execYears = $state(0);
+  let execMonths = $state(0);
+  let execDays = $state(0);
+  let execBaseDate = $state(new Date().toISOString().split('T')[0]);
+  let execProgressionFraction = $state(0.16);
+  let execRemissionDays = $state(0);
+  let execDetractionDays = $state(0);
+  let execParoleFraction = $state(1/3);
+
+  // Derived Execution State
+  let execTotalDays = $derived.by(() => {
+      return toDays({ years: execYears, months: execMonths, days: execDays });
+  });
+
+  let execProgressionDate = $derived.by(() => {
+      return calculateDate(execBaseDate, execTotalDays, execProgressionFraction, execRemissionDays + execDetractionDays);
+  });
+
+  let execParoleDate = $derived.by(() => {
+      return calculateDate(execBaseDate, execTotalDays, execParoleFraction, execRemissionDays + execDetractionDays);
+  });
+
+  let execEndDate = $derived.by(() => {
+      return calculateEndDate(execBaseDate, execTotalDays, execRemissionDays + execDetractionDays);
+  });
+
+  let execMemoryString = $derived.by(() => {
+      const progressionLabel = progressionOptions.find(p => p.value === execProgressionFraction)?.label ?? 'Custom';
+      const paroleLabel = fractionOptions.find(f => f.value === execParoleFraction)?.label ?? 'Custom';
+      
+      return `CÁLCULO DE EXECUÇÃO PENAL
+----------------------------------------
+Pena Total: ${execYears} anos, ${execMonths} meses, ${execDays} dias
+Data-Base: ${new Date(execBaseDate).toLocaleDateString('pt-BR')}
+----------------------------------------
+Progressão de Regime (${progressionLabel}):
+Data: ${execProgressionDate.toLocaleDateString('pt-BR')}
+
+Livramento Condicional (${paroleLabel}):
+Data: ${execParoleDate.toLocaleDateString('pt-BR')}
+
+Término de Pena:
+Data: ${execEndDate.toLocaleDateString('pt-BR')}
+----------------------------------------
+Deduções:
+Remição: ${execRemissionDays} dias
+Detração: ${execDetractionDays} dias
+`;
+  });
 
   // Fine State
   let fineDays = $state(10);
@@ -39,55 +89,51 @@
   let remissionType = $state<'work' | 'study'>('work');
   let remissionInput = $state(0);
 
-  // Derived state for the result calculation
-  let currentResult = $derived.by(() => {
-    const base: Duration = { years, months, days };
-    return calculateExecution(base, selectedFractionValue);
+  // Dosimetry State
+  let dosiBaseYears = $state(0);
+  let dosiBaseMonths = $state(0);
+  let dosiBaseDays = $state(0);
+  
+  let dosiPhase2Ops = $state<Omit<DosimetryOperation, 'result'>[]>([]);
+  let dosiPhase3Ops = $state<Omit<DosimetryOperation, 'result'>[]>([]);
+
+  // Derived Dosimetry Result
+  let dosiResult = $derived.by(() => {
+      const base = { years: dosiBaseYears, months: dosiBaseMonths, days: dosiBaseDays };
+      return calculateDosimetry(base, dosiPhase2Ops, dosiPhase3Ops);
   });
 
-  // Derived state for the total result
-  let totalResult = $derived.by(() => {
-    if (items.length === 0) return currentResult;
-    
-    let totalDays = 0;
-    items.forEach(item => {
-        totalDays += toDays(item.result);
-    });
-    return fromDays(totalDays);
-  });
+  function addDosiOp(phase: 2 | 3) {
+      const op: Omit<DosimetryOperation, 'result'> = {
+          id: crypto.randomUUID(),
+          name: phase === 2 ? 'Agravante/Atenuante' : 'Causa de Aumento/Diminuição',
+          fractionValue: 1/6,
+          fractionLabel: '1/6',
+          type: 'increase',
+          target: 'base'
+      };
+      if (phase === 2) {
+          dosiPhase2Ops = [...dosiPhase2Ops, op];
+      } else {
+          dosiPhase3Ops = [...dosiPhase3Ops, op];
+      }
+  }
 
-  // Derived state for total base (for remaining calculation)
-  let totalBase = $derived.by(() => {
-      if (items.length === 0) return { years, months, days };
-      let totalDays = 0;
-      items.forEach(item => {
-          totalDays += toDays(item.base);
-      });
-      return fromDays(totalDays);
-  });
+  function removeDosiOp(phase: 2 | 3, id: string) {
+      if (phase === 2) {
+          dosiPhase2Ops = dosiPhase2Ops.filter(o => o.id !== id);
+      } else {
+          dosiPhase3Ops = dosiPhase3Ops.filter(o => o.id !== id);
+      }
+  }
 
-  // Derived state for remaining time (only for subtraction mode)
-  let remainingTime = $derived.by(() => {
-      if (mode !== 'subtracao') return null;
-      return subtractDuration(totalBase, totalResult);
-  });
-
-  // Derived state for the memory string
-  let memoryString = $derived.by(() => {
-    if (items.length === 0) {
-        const base: Duration = { years, months, days };
-        const fractionLabel = fractionOptions.find(f => f.value === selectedFractionValue)?.label ?? 'Custom';
-        const item: CalculationItem = {
-            id: 'temp',
-            base,
-            fractionValue: selectedFractionValue,
-            fractionLabel,
-            result: currentResult
-        };
-        return generateReport([item], mode);
-    }
-    return generateReport(items, mode);
-  });
+  function updateDosiOp(phase: 2 | 3, id: string, updates: Partial<Omit<DosimetryOperation, 'result'>>) {
+      if (phase === 2) {
+          dosiPhase2Ops = dosiPhase2Ops.map(o => o.id === id ? { ...o, ...updates } : o);
+      } else {
+          dosiPhase3Ops = dosiPhase3Ops.map(o => o.id === id ? { ...o, ...updates } : o);
+      }
+  }
 
   // Fine Derived State
   let currentWage = $derived.by(() => {
@@ -141,53 +187,35 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
 `;
   });
 
-  function addItem() {
-    const base: Duration = { years, months, days };
-    const fractionLabel = fractionOptions.find(f => f.value === selectedFractionValue)?.label ?? 'Custom';
-    
-    // Don't add empty calculations
-    if (years === 0 && months === 0 && days === 0) return;
-
-    items = [...items, {
-        id: crypto.randomUUID(),
-        base,
-        fractionValue: selectedFractionValue,
-        fractionLabel,
-        result: currentResult
-    }];
-
-    // Reset inputs
-    years = 0;
-    months = 0;
-    days = 0;
-    selectedFractionValue = 1;
+  function handleExecProgressionChange(e: Event) {
+      const target = e.target as HTMLSelectElement;
+      execProgressionFraction = parseFloat(target.value);
   }
 
-  function removeItem(id: string) {
-      items = items.filter(i => i.id !== id);
+  function handleExecParoleChange(e: Event) {
+      const target = e.target as HTMLSelectElement;
+      execParoleFraction = parseFloat(target.value);
+  }
+
+  function handleFineFractionChange(e: Event) {
+      const target = e.target as HTMLSelectElement;
+      fineFractionValue = parseFloat(target.value);
   }
 
   function copyToClipboard() {
     let text = '';
-    if (activeTab === 'execution') text = memoryString;
+    if (activeTab === 'execution') text = execMemoryString;
     else if (activeTab === 'fine') text = fineMemoryString;
-    else text = remissionMemoryString;
+    else if (activeTab === 'remission') text = remissionMemoryString;
+    else if (activeTab === 'dosimetry') {
+        text = `DOSIMETRIA DA PENA\nDefinitiva: ${formatDuration(dosiResult.phase3.result)}`;
+    }
 
     navigator.clipboard.writeText(text);
     copied = true;
     setTimeout(() => {
       copied = false;
     }, 2000);
-  }
-
-  function handleFractionChange(e: Event) {
-    const target = e.target as HTMLSelectElement;
-    selectedFractionValue = parseFloat(target.value);
-  }
-
-  function handleFineFractionChange(e: Event) {
-      const target = e.target as HTMLSelectElement;
-      fineFractionValue = parseFloat(target.value);
   }
 </script>
 
@@ -215,6 +243,15 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
           {/if}
       </button>
       <button
+          onclick={() => activeTab = 'dosimetry'}
+          class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'dosimetry' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+      >
+          Dosimetria
+          {#if activeTab === 'dosimetry'}
+              <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900"></div>
+          {/if}
+      </button>
+      <button
           onclick={() => activeTab = 'fine'}
           class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'fine' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
       >
@@ -236,143 +273,304 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
 
   <div class="p-6 space-y-6">
     {#if activeTab === 'execution'}
-    <!-- Duration Inputs -->
-    <div class="grid grid-cols-3 gap-4">
-      <div class="space-y-2">
-        <label for="years" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Anos</label>
-        <input
-          id="years"
-          type="number"
-          min="0"
-          bind:value={years}
-          class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-shadow"
-          placeholder="0"
-        />
-      </div>
-      <div class="space-y-2">
-        <label for="months" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Meses</label>
-        <input
-          id="months"
-          type="number"
-          min="0"
-          bind:value={months}
-          class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-shadow"
-          placeholder="0"
-        />
-      </div>
-      <div class="space-y-2">
-        <label for="days" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Dias</label>
-        <input
-          id="days"
-          type="number"
-          min="0"
-          bind:value={days}
-          class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-shadow"
-          placeholder="0"
-        />
-      </div>
-    </div>
-
-    <!-- Fraction Selection -->
-    <div class="space-y-2">
-      <label for="fraction" class="text-sm font-medium text-slate-900">Fração da Pena</label>
-      <div class="relative">
-        <select
-          id="fraction"
-          onchange={handleFractionChange}
-          value={selectedFractionValue}
-          class="flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none"
-        >
-          {#each fractionOptions as option}
-            <option value={option.value}>{option.label}</option>
-          {/each}
-        </select>
-        <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-slate-500">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add Button -->
-    <button
-        onclick={addItem}
-        class="w-full inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-slate-900 text-slate-50 hover:bg-slate-900/90 h-10 px-4 py-2"
-    >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
-        Adicionar ao Cálculo
-    </button>
-
-    <!-- Items List -->
-    {#if items.length > 0}
-        <div class="space-y-2 border-t border-slate-100 pt-4">
-            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Itens Adicionados</h3>
-            {#each items as item, i}
-                <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 text-sm">
-                    <div>
-                        <div class="font-medium text-slate-900">#{i + 1} - {formatDuration(item.base)}</div>
-                        <div class="text-slate-500 text-xs">Fração: {item.fractionLabel} -> {formatDuration(item.result)}</div>
-                    </div>
-                    <button onclick={() => removeItem(item.id)} class="text-slate-400 hover:text-red-500 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
-                    </button>
+    <div class="space-y-6">
+        <!-- Sentence Data -->
+        <div class="space-y-3">
+            <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">Dados da Pena</h3>
+            <div class="grid grid-cols-3 gap-4">
+                <div class="space-y-2">
+                    <label for="execYears" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Anos</label>
+                    <input id="execYears" type="number" min="0" bind:value={execYears} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
                 </div>
-            {/each}
-        </div>
-    {/if}
-
-    <!-- Toggle Mode -->
-    <div class="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-3">
-      <div class="space-y-0.5">
-        <div class="text-sm font-medium text-slate-900">
-          {mode === 'soma' ? 'Modo Progressão' : 'Modo Remição/Detração'}
-        </div>
-        <div class="text-xs text-slate-500">
-          {mode === 'soma' ? 'Calculando fração da pena' : 'Calculando tempo a deduzir'}
-        </div>
-      </div>
-      <button
-        onclick={() => mode = mode === 'soma' ? 'subtracao' : 'soma'}
-        class={`
-          relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2
-          ${mode === 'soma' ? 'bg-slate-900' : 'bg-emerald-600'}
-        `}
-        role="switch"
-        aria-checked={mode === 'subtracao'}
-        title="Alternar modo"
-      >
-        <span
-          class={`
-            pointer-events-none block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform duration-200 ease-in-out
-            ${mode === 'soma' ? 'translate-x-0' : 'translate-x-5'}
-          `}
-        ></span>
-      </button>
-    </div>
-
-    <!-- Result Box -->
-    <div class="rounded-lg bg-sky-50 border border-sky-100 p-4 transition-all duration-300">
-      <div class="text-xs font-bold text-sky-700 uppercase tracking-wider mb-1">
-          {items.length > 0 ? 'Resultado Total' : 'Resultado Atual'}
-      </div>
-      <div class="text-3xl font-bold text-sky-900 tracking-tight">
-        {formatDuration(totalResult)}
-      </div>
-      
-      {#if mode === 'subtracao' && remainingTime}
-        <div class="mt-3 pt-3 border-t border-sky-200">
-            <div class="text-xs font-bold text-sky-700 uppercase tracking-wider mb-1">Tempo Restante</div>
-            <div class="text-xl font-bold text-sky-800 tracking-tight">
-                {formatDuration(remainingTime)}
+                <div class="space-y-2">
+                    <label for="execMonths" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Meses</label>
+                    <input id="execMonths" type="number" min="0" bind:value={execMonths} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
+                </div>
+                <div class="space-y-2">
+                    <label for="execDays" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Dias</label>
+                    <input id="execDays" type="number" min="0" bind:value={execDays} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
+                </div>
+            </div>
+            <div class="space-y-2">
+                <label for="execBaseDate" class="text-sm font-medium text-slate-900">Data-Base (Início/Última Prisão)</label>
+                <input
+                    id="execBaseDate"
+                    type="date"
+                    bind:value={execBaseDate}
+                    class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2"
+                />
             </div>
         </div>
-      {/if}
 
-      <div class="mt-2 text-xs text-sky-600 flex items-center gap-2">
-        <span class="inline-block h-1.5 w-1.5 rounded-full bg-sky-400"></span>
-        {items.length > 0 ? 'Total Base' : 'Base'}: {formatDuration(totalBase)}
-      </div>
+        <!-- Progression Settings -->
+        <div class="space-y-3">
+            <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">Critérios de Progressão</h3>
+            <div class="space-y-2">
+                <label for="execProgression" class="text-sm font-medium text-slate-900">Tipo de Crime (Fração de Progressão)</label>
+                <div class="relative">
+                    <select
+                        id="execProgression"
+                        onchange={handleExecProgressionChange}
+                        value={execProgressionFraction}
+                        class="flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2 appearance-none"
+                    >
+                        {#each progressionOptions as option}
+                            <option value={option.value}>{option.label}</option>
+                        {/each}
+                    </select>
+                    <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-slate-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deductions -->
+        <div class="space-y-3">
+            <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">Deduções</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <label for="execRemission" class="text-sm font-medium text-slate-900">Remição (Dias)</label>
+                    <input id="execRemission" type="number" min="0" bind:value={execRemissionDays} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
+                    <p class="text-xs text-slate-500">Trabalho/Estudo</p>
+                </div>
+                <div class="space-y-2">
+                    <label for="execDetraction" class="text-sm font-medium text-slate-900">Detração (Dias)</label>
+                    <input id="execDetraction" type="number" min="0" bind:value={execDetractionDays} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
+                    <p class="text-xs text-slate-500">Tempo preso provisoriamente</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Parole Settings -->
+        <div class="space-y-3">
+            <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">Livramento Condicional</h3>
+            <div class="space-y-2">
+                <label for="execParole" class="text-sm font-medium text-slate-900">Requisito Objetivo</label>
+                <div class="relative">
+                    <select
+                        id="execParole"
+                        onchange={handleExecParoleChange}
+                        value={execParoleFraction}
+                        class="flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2 appearance-none"
+                    >
+                        <option value={1/3}>1/3 - Comum</option>
+                        <option value={1/2}>1/2 - Reincidente Doloso</option>
+                        <option value={2/3}>2/3 - Hediondo</option>
+                    </select>
+                    <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-slate-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div class="grid grid-cols-1 gap-4 pt-4">
+            <!-- Progression Result -->
+            <div class="rounded-lg bg-sky-50 border border-sky-100 p-4">
+                <div class="text-xs font-bold text-sky-700 uppercase tracking-wider mb-1">Data para Progressão de Regime</div>
+                <div class="text-2xl font-bold text-sky-900 tracking-tight">
+                    {execProgressionDate.toLocaleDateString('pt-BR')}
+                </div>
+                <div class="mt-1 text-xs text-sky-600">
+                    Requisito: {Math.ceil(execTotalDays * execProgressionFraction)} dias - {execRemissionDays + execDetractionDays} dias (deduções)
+                </div>
+            </div>
+
+            <!-- Parole Result -->
+            <div class="rounded-lg bg-indigo-50 border border-indigo-100 p-4">
+                <div class="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">Data para Livramento Condicional</div>
+                <div class="text-2xl font-bold text-indigo-900 tracking-tight">
+                    {execParoleDate.toLocaleDateString('pt-BR')}
+                </div>
+                <div class="mt-1 text-xs text-indigo-600">
+                    Requisito: {Math.ceil(execTotalDays * execParoleFraction)} dias - {execRemissionDays + execDetractionDays} dias (deduções)
+                </div>
+            </div>
+
+            <!-- End Date Result -->
+            <div class="rounded-lg bg-slate-100 border border-slate-200 p-4">
+                <div class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Término de Pena (TCP)</div>
+                <div class="text-2xl font-bold text-slate-900 tracking-tight">
+                    {execEndDate.toLocaleDateString('pt-BR')}
+                </div>
+                <div class="mt-1 text-xs text-slate-600">
+                    Total: {execTotalDays} dias - {execRemissionDays + execDetractionDays} dias (deduções)
+                </div>
+            </div>
+        </div>
     </div>
 
+    {:else if activeTab === 'dosimetry'}
+    <div class="space-y-6">
+        <!-- Phase 1 -->
+        <div class="space-y-3">
+            <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">1ª Fase - Pena Base</h3>
+            <div class="grid grid-cols-3 gap-4">
+                <div class="space-y-2">
+                    <label for="dosiYears" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Anos</label>
+                    <input id="dosiYears" type="number" min="0" bind:value={dosiBaseYears} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
+                </div>
+                <div class="space-y-2">
+                    <label for="dosiMonths" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Meses</label>
+                    <input id="dosiMonths" type="number" min="0" bind:value={dosiBaseMonths} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
+                </div>
+                <div class="space-y-2">
+                    <label for="dosiDays" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Dias</label>
+                    <input id="dosiDays" type="number" min="0" bind:value={dosiBaseDays} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
+                </div>
+            </div>
+        </div>
+
+        <!-- Phase 2 -->
+        <div class="space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider">2ª Fase - Agravantes e Atenuantes</h3>
+                <button onclick={() => addDosiOp(2)} class="text-xs font-medium text-slate-600 hover:text-slate-900 flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                    Adicionar
+                </button>
+            </div>
+            
+            {#if dosiPhase2Ops.length === 0}
+                <div class="text-sm text-slate-400 italic py-2">Nenhuma agravante ou atenuante adicionada.</div>
+            {:else}
+                <div class="space-y-3">
+                    {#each dosiPhase2Ops as op (op.id)}
+                        <div class="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <input type="text" bind:value={op.name} class="bg-transparent text-sm font-medium text-slate-900 border-none p-0 focus:ring-0 w-full" placeholder="Nome da Agravante/Atenuante" />
+                                <button onclick={() => removeDosiOp(2, op.id)} class="text-slate-400 hover:text-red-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs text-slate-500 block mb-1">Tipo</label>
+                                    <select bind:value={op.type} class="w-full text-xs rounded border-slate-200 py-1">
+                                        <option value="increase">Agravante (+)</option>
+                                        <option value="decrease">Atenuante (-)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-slate-500 block mb-1">Fração</label>
+                                    <select 
+                                        value={op.fractionValue} 
+                                        onchange={(e) => {
+                                            const val = parseFloat(e.currentTarget.value);
+                                            const label = e.currentTarget.options[e.currentTarget.selectedIndex].text;
+                                            updateDosiOp(2, op.id, { fractionValue: val, fractionLabel: label });
+                                        }}
+                                        class="w-full text-xs rounded border-slate-200 py-1"
+                                    >
+                                        <option value={1/6}>1/6</option>
+                                        <option value={1/3}>1/3</option>
+                                        <option value={1/2}>1/2</option>
+                                        <option value={2/3}>2/3</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-500 block mb-1">Aplicar sobre</label>
+                                <div class="flex gap-3">
+                                    <label class="flex items-center gap-1 text-xs cursor-pointer">
+                                        <input type="radio" bind:group={op.target} value="base" class="text-slate-900 focus:ring-slate-900" />
+                                        Pena Base
+                                    </label>
+                                    <label class="flex items-center gap-1 text-xs cursor-pointer">
+                                        <input type="radio" bind:group={op.target} value="current" class="text-slate-900 focus:ring-slate-900" />
+                                        Acumulado
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+            <div class="text-xs text-right text-slate-500">
+                Parcial: <span class="font-medium text-slate-900">{formatDuration(dosiResult.phase2.result)}</span>
+            </div>
+        </div>
+
+        <!-- Phase 3 -->
+        <div class="space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider">3ª Fase - Causas de Aumento e Diminuição</h3>
+                <button onclick={() => addDosiOp(3)} class="text-xs font-medium text-slate-600 hover:text-slate-900 flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                    Adicionar
+                </button>
+            </div>
+            
+            {#if dosiPhase3Ops.length === 0}
+                <div class="text-sm text-slate-400 italic py-2">Nenhuma causa adicionada.</div>
+            {:else}
+                <div class="space-y-3">
+                    {#each dosiPhase3Ops as op (op.id)}
+                        <div class="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <input type="text" bind:value={op.name} class="bg-transparent text-sm font-medium text-slate-900 border-none p-0 focus:ring-0 w-full" placeholder="Nome da Causa" />
+                                <button onclick={() => removeDosiOp(3, op.id)} class="text-slate-400 hover:text-red-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs text-slate-500 block mb-1">Tipo</label>
+                                    <select bind:value={op.type} class="w-full text-xs rounded border-slate-200 py-1">
+                                        <option value="increase">Aumento (+)</option>
+                                        <option value="decrease">Diminuição (-)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-slate-500 block mb-1">Fração</label>
+                                    <select 
+                                        value={op.fractionValue} 
+                                        onchange={(e) => {
+                                            const val = parseFloat(e.currentTarget.value);
+                                            const label = e.currentTarget.options[e.currentTarget.selectedIndex].text;
+                                            updateDosiOp(3, op.id, { fractionValue: val, fractionLabel: label });
+                                        }}
+                                        class="w-full text-xs rounded border-slate-200 py-1"
+                                    >
+                                        <option value={1/6}>1/6</option>
+                                        <option value={1/3}>1/3</option>
+                                        <option value={1/2}>1/2</option>
+                                        <option value={2/3}>2/3</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-500 block mb-1">Aplicar sobre</label>
+                                <div class="flex gap-3">
+                                    <label class="flex items-center gap-1 text-xs cursor-pointer">
+                                        <input type="radio" bind:group={op.target} value="base" class="text-slate-900 focus:ring-slate-900" />
+                                        Pena Intermediária
+                                    </label>
+                                    <label class="flex items-center gap-1 text-xs cursor-pointer">
+                                        <input type="radio" bind:group={op.target} value="current" class="text-slate-900 focus:ring-slate-900" />
+                                        Acumulado
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+        </div>
+
+        <!-- Result Box -->
+        <div class="rounded-lg bg-purple-50 border border-purple-100 p-4 transition-all duration-300">
+            <div class="text-xs font-bold text-purple-700 uppercase tracking-wider mb-1">Pena Definitiva</div>
+            <div class="text-3xl font-bold text-purple-900 tracking-tight">
+                {formatDuration(dosiResult.phase3.result)}
+            </div>
+            <div class="mt-2 text-xs text-purple-600">
+                Base: {formatDuration(dosiResult.phase1)} → Intermediária: {formatDuration(dosiResult.phase2.result)}
+            </div>
+        </div>
+    </div>
     {:else if activeTab === 'fine'}
     <!-- Fine Calculator -->
     <div class="space-y-4">

@@ -34,14 +34,42 @@ export const fractionOptions = [
   { label: '1/6', value: 1 / 6 },
   { label: '2/3', value: 2 / 3 },
   { label: '3/5', value: 0.6 },
-  { label: '16% (Crime Hediondo primário)', value: 0.16 },
-  { label: '25% (Não hediondo)', value: 0.25 },
-  { label: '30% (Reincidente não hediondo)', value: 0.30 },
-  { label: '40% (Hediondo primário)', value: 0.40 },
-  { label: '50% (Hediondo c/ resultado morte)', value: 0.50 },
-  { label: '60% (Reincidente hediondo)', value: 0.60 },
-  { label: '70% (Reincidente hediondo c/ morte)', value: 0.70 },
 ];
+
+export const progressionOptions = [
+    { label: '16% - Primário s/ violência', value: 0.16 },
+    { label: '20% - Reincidente s/ violência', value: 0.20 },
+    { label: '25% - Primário c/ violência', value: 0.25 },
+    { label: '30% - Reincidente c/ violência', value: 0.30 },
+    { label: '40% - Hediondo primário', value: 0.40 },
+    { label: '50% - Hediondo c/ morte (primário) ou Org. Crim.', value: 0.50 },
+    { label: '60% - Hediondo reincidente', value: 0.60 },
+    { label: '70% - Hediondo c/ morte (reincidente)', value: 0.70 },
+    // Antigos (para crimes antes de 2019 ou casos específicos)
+    { label: '1/6 (Regra Geral Antiga)', value: 1/6 },
+    { label: '2/5 (Hediondo Primário Antigo)', value: 0.4 },
+    { label: '3/5 (Hediondo Reincidente Antigo)', value: 0.6 },
+];
+
+export function addDaysToDate(date: Date, days: number): Date {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+}
+
+export function calculateDate(baseDate: string, totalDays: number, fraction: number, deductedDays: number): Date {
+    const base = new Date(baseDate + 'T00:00:00'); // Force local time interpretation or consistent parsing
+    const daysRequired = Math.ceil(totalDays * fraction);
+    const daysToServe = Math.max(0, daysRequired - deductedDays);
+    return addDaysToDate(base, daysToServe);
+}
+
+export function calculateEndDate(baseDate: string, totalDays: number, deductedDays: number): Date {
+    const base = new Date(baseDate + 'T00:00:00');
+    const daysToServe = Math.max(0, totalDays - deductedDays);
+    return addDaysToDate(base, daysToServe);
+}
+
 
 export function toDays(d: Duration): number {
   return (d.years * PENAL_YEAR) + (d.months * PENAL_MONTH) + d.days;
