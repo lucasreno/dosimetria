@@ -24,11 +24,11 @@
     fineFractions
   } from '$lib/logic/fine';
 
-  // Svelte 5 Runes
-  let activeTab = $state<'execution' | 'fine' | 'remission' | 'dosimetry'>('execution');
+    // Svelte 5 Runes
+    let activeTab = $state<'execution' | 'fine' | 'remission' | 'dosimetry'>('dosimetry');
   let copied = $state(false);
 
-    const tabOrder = ['execution', 'dosimetry', 'fine', 'remission'] as const;
+        const tabOrder = ['dosimetry', 'execution', 'fine', 'remission'] as const;
     type TabKey = (typeof tabOrder)[number];
     const tabIndexByKey = new Map<TabKey, number>(tabOrder.map((k, i) => [k, i]));
     let tabButtons = $state<Record<TabKey, HTMLButtonElement | null>>({
@@ -415,6 +415,21 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
   <!-- Tabs -->
     <div class="flex border-b border-slate-100" role="tablist" aria-label="Calculadora penal" tabindex="0" onkeydown={handleTabKeydown}>
       <button
+          bind:this={tabButtons.dosimetry}
+          id="tab-dosimetry"
+          role="tab"
+          aria-selected={activeTab === 'dosimetry'}
+          aria-controls="panel-dosimetry"
+          tabindex={activeTab === 'dosimetry' ? 0 : -1}
+          onclick={() => setActiveTab('dosimetry')}
+          class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'dosimetry' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+      >
+          Dosimetria
+          {#if activeTab === 'dosimetry'}
+              <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900"></div>
+          {/if}
+      </button>
+      <button
           bind:this={tabButtons.execution}
           id="tab-execution"
           role="tab"
@@ -427,21 +442,6 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
           <span class="hidden sm:inline">Execução Penal</span>
           <span class="sm:hidden">Execução</span>
           {#if activeTab === 'execution'}
-              <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900"></div>
-          {/if}
-      </button>
-      <button
-          bind:this={tabButtons.dosimetry}
-          id="tab-dosimetry"
-          role="tab"
-          aria-selected={activeTab === 'dosimetry'}
-          aria-controls="panel-dosimetry"
-          tabindex={activeTab === 'dosimetry' ? 0 : -1}
-          onclick={() => setActiveTab('dosimetry')}
-          class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'dosimetry' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-      >
-          Dosimetria
-          {#if activeTab === 'dosimetry'}
               <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900"></div>
           {/if}
       </button>
