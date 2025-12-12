@@ -445,7 +445,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
 
 <div class="w-full max-w-md md:max-w-2xl mx-auto bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden font-sans">
   <!-- Header -->
-  <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+    <div class="bg-slate-50 px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-100 flex items-center justify-between">
     <div>
       <h2 class="text-lg font-semibold text-slate-900">Calculadora Penal</h2>
       <p class="text-sm text-slate-500">Dosimetria e Execução</p>
@@ -455,8 +455,8 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
     </div>
   </div>
 
-  <!-- Tabs -->
-    <div class="flex border-b border-slate-100" role="tablist" aria-label="Calculadora penal" tabindex="0" onkeydown={handleTabKeydown}>
+    <!-- Tabs -->
+        <div class="flex border-b border-slate-100 overflow-x-auto" role="tablist" aria-label="Calculadora penal" tabindex="0" onkeydown={handleTabKeydown}>
       <button
           bind:this={tabButtons.dosimetry}
           id="tab-dosimetry"
@@ -465,7 +465,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
           aria-controls="panel-dosimetry"
           tabindex={activeTab === 'dosimetry' ? 0 : -1}
           onclick={() => setActiveTab('dosimetry')}
-          class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'dosimetry' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+          class={`flex-none sm:flex-1 px-4 sm:px-0 py-3 text-sm font-medium whitespace-nowrap transition-colors relative ${activeTab === 'dosimetry' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
       >
           Dosimetria
           {#if activeTab === 'dosimetry'}
@@ -480,7 +480,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
           aria-controls="panel-execution"
           tabindex={activeTab === 'execution' ? 0 : -1}
           onclick={() => setActiveTab('execution')}
-          class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'execution' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+          class={`flex-none sm:flex-1 px-4 sm:px-0 py-3 text-sm font-medium whitespace-nowrap transition-colors relative ${activeTab === 'execution' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
       >
           <span class="hidden sm:inline">Execução Penal</span>
           <span class="sm:hidden">Execução</span>
@@ -496,7 +496,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
           aria-controls="panel-fine"
           tabindex={activeTab === 'fine' ? 0 : -1}
           onclick={() => setActiveTab('fine')}
-          class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'fine' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+          class={`flex-none sm:flex-1 px-4 sm:px-0 py-3 text-sm font-medium whitespace-nowrap transition-colors relative ${activeTab === 'fine' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
       >
           <span class="hidden sm:inline">Dias-Multa</span>
           <span class="sm:hidden">Multa</span>
@@ -512,7 +512,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
           aria-controls="panel-remission"
           tabindex={activeTab === 'remission' ? 0 : -1}
           onclick={() => setActiveTab('remission')}
-          class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'remission' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+          class={`flex-none sm:flex-1 px-4 sm:px-0 py-3 text-sm font-medium whitespace-nowrap transition-colors relative ${activeTab === 'remission' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
       >
           <span class="hidden sm:inline">Remição (Trabalho/Estudo)</span>
           <span class="sm:hidden">Remição</span>
@@ -522,13 +522,13 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
       </button>
   </div>
 
-  <div class="p-6 space-y-6">
+  <div class="p-4 sm:p-6 space-y-6">
     {#if activeTab === 'execution'}
     <div id="panel-execution" role="tabpanel" tabindex="0" aria-labelledby="tab-execution" class="space-y-6">
         <!-- Sentence Data -->
         <div class="space-y-3">
             <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">Dados da Pena</h3>
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div class="space-y-2">
                     <label for="execYears" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Anos</label>
                     <input id="execYears" type="number" min="0" bind:value={execYears} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
@@ -579,7 +579,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
         <!-- Deductions -->
         <div class="space-y-3">
             <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">Deduções</h3>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="space-y-2">
                     <label for="execRemission" class="text-sm font-medium text-slate-900">Remição (Dias)</label>
                     <input id="execRemission" type="number" min="0" bind:value={execRemissionDays} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
@@ -681,7 +681,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
         <!-- Phase 1 -->
         <div class="space-y-3">
             <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">1ª Fase - Pena Base</h3>
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div class="space-y-2">
                     <label for="dosiYears" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Anos</label>
                     <input id="dosiYears" type="number" min="0" bind:value={dosiBaseYears} class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2" />
@@ -701,7 +701,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
         <div class="space-y-3">
             <div class="flex items-center justify-between border-b border-slate-100 pb-2">
                 <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider">2ª Fase - Agravantes e Atenuantes</h3>
-                <button onclick={() => addDosiOp(2)} class="text-xs font-medium text-slate-600 hover:text-slate-900 flex items-center gap-1">
+                <button onclick={() => addDosiOp(2)} class="text-xs font-medium text-slate-600 hover:text-slate-900 flex items-center gap-1 px-2 py-1 -mr-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
                     Adicionar
                 </button>
@@ -727,7 +727,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                                                 ...(selected ? { type: selected.type } : {})
                                             });
                                         }}
-                                        class="w-full text-sm font-medium text-slate-900 rounded border-slate-200 py-1"
+                                        class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 ring-offset-white focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2"
                                     >
                                         <option value="" disabled>Selecione a agravante/atenuante</option>
                                         {#each phase2FactorOptions as opt}
@@ -735,18 +735,18 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                                         {/each}
                                     </select>
                                 </div>
-                                <button onclick={() => removeDosiOp(2, op.id)} class="text-slate-400 hover:text-red-500" aria-label="Remover operação" title="Remover">
+                                <button onclick={() => removeDosiOp(2, op.id)} class="p-2 -m-2 text-slate-400 hover:text-red-500" aria-label="Remover operação" title="Remover">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
                                 </button>
                             </div>
-                            <div class="grid grid-cols-2 gap-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label class="text-xs text-slate-500 block mb-1" for={`p2-type-${op.id}`}>Tipo</label>
                                     <select
                                         id={`p2-type-${op.id}`}
                                         value={op.type}
                                         onchange={(e) => updateDosiOp(2, op.id, { type: (e.currentTarget as HTMLSelectElement).value as any })}
-                                        class="w-full text-xs rounded border-slate-200 py-1"
+                                        class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2"
                                     >
                                         <option value="increase">Agravante (+)</option>
                                         <option value="decrease">Atenuante (-)</option>
@@ -762,7 +762,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                                             const label = e.currentTarget.options[e.currentTarget.selectedIndex].text;
                                             updateDosiOp(2, op.id, { fractionValue: val, fractionLabel: label });
                                         }}
-                                        class="w-full text-xs rounded border-slate-200 py-1"
+                                        class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2"
                                     >
                                         <option value={1/6}>1/6</option>
                                         <option value={1/3}>1/3</option>
@@ -773,7 +773,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                             </div>
                             <fieldset>
                                 <legend class="text-xs text-slate-500 block mb-1">Aplicar sobre</legend>
-                                <div class="flex gap-3" role="radiogroup" aria-label="Aplicar sobre">
+                                <div class="flex flex-col sm:flex-row gap-3" role="radiogroup" aria-label="Aplicar sobre">
                                     <label class="flex items-center gap-1 text-xs cursor-pointer">
                                         <input
                                             type="radio"
@@ -809,7 +809,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
         <div class="space-y-3">
             <div class="flex items-center justify-between border-b border-slate-100 pb-2">
                 <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider">3ª Fase - Causas de Aumento e Diminuição</h3>
-                <button onclick={() => addDosiOp(3)} class="text-xs font-medium text-slate-600 hover:text-slate-900 flex items-center gap-1">
+                <button onclick={() => addDosiOp(3)} class="text-xs font-medium text-slate-600 hover:text-slate-900 flex items-center gap-1 px-2 py-1 -mr-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
                     Adicionar
                 </button>
@@ -835,7 +835,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                                                 ...(selected ? { type: selected.type } : {})
                                             });
                                         }}
-                                        class="w-full text-sm font-medium text-slate-900 rounded border-slate-200 py-1"
+                                        class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 ring-offset-white focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2"
                                     >
                                         <option value="" disabled>Selecione a causa</option>
                                         {#each phase3CauseOptions as opt}
@@ -843,18 +843,18 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                                         {/each}
                                     </select>
                                 </div>
-                                <button onclick={() => removeDosiOp(3, op.id)} class="text-slate-400 hover:text-red-500" aria-label="Remover operação" title="Remover">
+                                <button onclick={() => removeDosiOp(3, op.id)} class="p-2 -m-2 text-slate-400 hover:text-red-500" aria-label="Remover operação" title="Remover">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
                                 </button>
                             </div>
-                            <div class="grid grid-cols-2 gap-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label class="text-xs text-slate-500 block mb-1" for={`p3-type-${op.id}`}>Tipo</label>
                                     <select
                                         id={`p3-type-${op.id}`}
                                         value={op.type}
                                         onchange={(e) => updateDosiOp(3, op.id, { type: (e.currentTarget as HTMLSelectElement).value as any })}
-                                        class="w-full text-xs rounded border-slate-200 py-1"
+                                        class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2"
                                     >
                                         <option value="increase">Aumento (+)</option>
                                         <option value="decrease">Diminuição (-)</option>
@@ -870,7 +870,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                                             const label = e.currentTarget.options[e.currentTarget.selectedIndex].text;
                                             updateDosiOp(3, op.id, { fractionValue: val, fractionLabel: label });
                                         }}
-                                        class="w-full text-xs rounded border-slate-200 py-1"
+                                        class="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2"
                                     >
                                         <option value={1/6}>1/6</option>
                                         <option value={1/3}>1/3</option>
@@ -881,7 +881,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                             </div>
                             <fieldset>
                                 <legend class="text-xs text-slate-500 block mb-1">Aplicar sobre</legend>
-                                <div class="flex gap-3" role="radiogroup" aria-label="Aplicar sobre">
+                                <div class="flex flex-col sm:flex-row gap-3" role="radiogroup" aria-label="Aplicar sobre">
                                     <label class="flex items-center gap-1 text-xs cursor-pointer">
                                         <input
                                             type="radio"
@@ -957,7 +957,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
             </div>
         {/if}
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="space-y-2">
                 <label for="fineDays" class="text-sm font-medium text-slate-900">Dias-Multa</label>
                 <input
@@ -1003,7 +1003,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
     {:else}
     <!-- Remission Calculator -->
     <div id="panel-remission" role="tabpanel" tabindex="0" aria-labelledby="tab-remission" class="space-y-4">
-        <div class="flex gap-4">
+        <div class="flex flex-col sm:flex-row gap-3">
             <label class="flex items-center gap-2 cursor-pointer">
                 <input type="radio" name="remissionType" value="work" bind:group={remissionType} class="text-slate-900 focus:ring-slate-900" />
                 <span class="text-sm font-medium text-slate-900">Por Trabalho</span>
