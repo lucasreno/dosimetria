@@ -53,6 +53,10 @@
     }
 
     function buildExecutionReport(): string {
+        const progressionDateStr = execProgressionDate ? execProgressionDate.toLocaleDateString('pt-BR') : 'N/A';
+        const paroleDateStr = execParoleDate ? execParoleDate.toLocaleDateString('pt-BR') : 'N/A';
+        const endDateStr = execEndDate ? execEndDate.toLocaleDateString('pt-BR') : 'N/A';
+
         const progressionLabel = progressionOptions.find(p => p.value === execProgressionFraction)?.label ?? `${Math.round(execProgressionFraction * 100)}%`;
         const paroleLabel = fractionOptions.find(f => f.value === execParoleFraction)?.label ?? `${execParoleFraction}`;
 
@@ -74,15 +78,15 @@
             '----------------------------------------',
             `Progressão (${progressionLabel})`,
             `Requisito: ${requiredProgressionDays}d · A cumprir: ${daysToServeProgression}d`,
-            `Data: ${execProgressionDate.toLocaleDateString('pt-BR')}`,
+            `Data: ${progressionDateStr}`,
             '----------------------------------------',
             `Livramento Condicional (${paroleLabel})`,
             `Requisito: ${requiredParoleDays}d · A cumprir: ${daysToServeParole}d`,
-            `Data: ${execParoleDate.toLocaleDateString('pt-BR')}`,
+            `Data: ${paroleDateStr}`,
             '----------------------------------------',
             'Término de Pena (TCP)',
             `A cumprir: ${daysToServeEnd}d`,
-            `Data: ${execEndDate.toLocaleDateString('pt-BR')}`
+            `Data: ${endDateStr}`
         ].join('\n');
     }
 
@@ -192,21 +196,34 @@
       return toDays({ years: execYears, months: execMonths, days: execDays });
   });
 
+  let execBaseDateValid = $derived.by(() => {
+      if (!execBaseDate) return false;
+      const d = new Date(execBaseDate + 'T00:00:00');
+      return !Number.isNaN(d.getTime());
+  });
+
   let execProgressionDate = $derived.by(() => {
+      if (!execBaseDateValid) return null;
       return calculateDate(execBaseDate, execTotalDays, execProgressionFraction, execRemissionDays + execDetractionDays);
   });
 
   let execParoleDate = $derived.by(() => {
+      if (!execBaseDateValid) return null;
       return calculateDate(execBaseDate, execTotalDays, execParoleFraction, execRemissionDays + execDetractionDays);
   });
 
   let execEndDate = $derived.by(() => {
+      if (!execBaseDateValid) return null;
       return calculateEndDate(execBaseDate, execTotalDays, execRemissionDays + execDetractionDays);
   });
 
   let execMemoryString = $derived.by(() => {
       const progressionLabel = progressionOptions.find(p => p.value === execProgressionFraction)?.label ?? 'Custom';
       const paroleLabel = fractionOptions.find(f => f.value === execParoleFraction)?.label ?? 'Custom';
+
+    const progressionDateStr = execProgressionDate ? execProgressionDate.toLocaleDateString('pt-BR') : 'N/A';
+    const paroleDateStr = execParoleDate ? execParoleDate.toLocaleDateString('pt-BR') : 'N/A';
+    const endDateStr = execEndDate ? execEndDate.toLocaleDateString('pt-BR') : 'N/A';
       
       return `CÁLCULO DE EXECUÇÃO PENAL
 ----------------------------------------
@@ -214,13 +231,13 @@ Pena Total: ${execYears} anos, ${execMonths} meses, ${execDays} dias
 Data-Base: ${formatISODatePtBR(execBaseDate)}
 ----------------------------------------
 Progressão de Regime (${progressionLabel}):
-Data: ${execProgressionDate.toLocaleDateString('pt-BR')}
+Data: ${progressionDateStr}
 
 Livramento Condicional (${paroleLabel}):
-Data: ${execParoleDate.toLocaleDateString('pt-BR')}
+Data: ${paroleDateStr}
 
 Término de Pena:
-Data: ${execEndDate.toLocaleDateString('pt-BR')}
+Data: ${endDateStr}
 ----------------------------------------
 Deduções:
 Remição: ${execRemissionDays} dias
@@ -366,7 +383,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
   }
 
     let canCopy = $derived.by(() => {
-        if (activeTab === 'execution') return execTotalDays > 0 && !!execBaseDate;
+        if (activeTab === 'execution') return execTotalDays > 0 && execBaseDateValid;
         if (activeTab === 'fine') return fineDays > 0 && !!fineDate && ((currentWage?.value ?? 0) > 0);
         if (activeTab === 'remission') return remissionInput > 0;
         if (activeTab === 'dosimetry') return toDays({ years: dosiBaseYears, months: dosiBaseMonths, days: dosiBaseDays }) > 0;
@@ -375,7 +392,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
 
     let copyDisabledReason = $derived.by(() => {
         if (canCopy) return '';
-        if (activeTab === 'execution') return 'Informe a pena e a data-base para copiar.';
+        if (activeTab === 'execution') return 'Informe a pena e uma data-base válida para copiar.';
         if (activeTab === 'fine') return 'Informe a data e os parâmetros da multa para copiar.';
         if (activeTab === 'remission') return 'Informe dias/horas para copiar.';
         if (activeTab === 'dosimetry') return 'Informe a pena-base para copiar.';
@@ -556,10 +573,16 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
             </div>
         </div>
 
-        {#if execTotalDays <= 0}
+        {#if execTotalDays <= 0 || !execBaseDateValid}
             <div class="rounded-lg bg-amber-50 border border-amber-100 p-4">
                 <div class="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">Atenção</div>
-                <div class="text-sm text-amber-900">Informe a pena (anos/meses/dias) para calcular as datas.</div>
+                <div class="text-sm text-amber-900">
+                    {#if execTotalDays <= 0}
+                        Informe a pena (anos/meses/dias) para calcular as datas.
+                    {:else}
+                        Informe uma data-base válida para calcular as datas.
+                    {/if}
+                </div>
             </div>
         {:else}
         <div class="rounded-lg bg-slate-50 border border-slate-100 p-4">
@@ -578,7 +601,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
             <div class="rounded-lg bg-sky-50 border border-sky-100 p-4">
                 <div class="text-xs font-bold text-sky-700 uppercase tracking-wider mb-1">Data para Progressão de Regime</div>
                 <div class="text-2xl font-bold text-sky-900 tracking-tight">
-                    {execProgressionDate.toLocaleDateString('pt-BR')}
+                    {execProgressionDate?.toLocaleDateString('pt-BR')}
                 </div>
                 <div class="mt-1 text-xs text-sky-600">
                     Requisito: {Math.ceil(execTotalDays * execProgressionFraction)} dias - {execRemissionDays + execDetractionDays} dias (deduções)
@@ -589,7 +612,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
             <div class="rounded-lg bg-indigo-50 border border-indigo-100 p-4">
                 <div class="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">Data para Livramento Condicional</div>
                 <div class="text-2xl font-bold text-indigo-900 tracking-tight">
-                    {execParoleDate.toLocaleDateString('pt-BR')}
+                    {execParoleDate?.toLocaleDateString('pt-BR')}
                 </div>
                 <div class="mt-1 text-xs text-indigo-600">
                     Requisito: {Math.ceil(execTotalDays * execParoleFraction)} dias - {execRemissionDays + execDetractionDays} dias (deduções)
@@ -600,7 +623,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
             <div class="rounded-lg bg-slate-100 border border-slate-200 p-4">
                 <div class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Término de Pena (TCP)</div>
                 <div class="text-2xl font-bold text-slate-900 tracking-tight">
-                    {execEndDate.toLocaleDateString('pt-BR')}
+                    {execEndDate?.toLocaleDateString('pt-BR')}
                 </div>
                 <div class="mt-1 text-xs text-slate-600">
                     Total: {execTotalDays} dias - {execRemissionDays + execDetractionDays} dias (deduções)
