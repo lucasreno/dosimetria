@@ -259,6 +259,49 @@ Detração: ${execDetractionDays} dias
   let dosiBaseYears = $state(0);
   let dosiBaseMonths = $state(0);
   let dosiBaseDays = $state(0);
+
+  type Phase2FactorOption = {
+      label: string;
+      type: 'increase' | 'decrease';
+  };
+  const phase2FactorOptions: Phase2FactorOption[] = [
+      // Agravantes (ex.: CP art. 61 e seguintes)
+      { label: 'Reincidência', type: 'increase' },
+      { label: 'Motivo torpe', type: 'increase' },
+      { label: 'Motivo fútil', type: 'increase' },
+      { label: 'Traição / emboscada / dissimulação', type: 'increase' },
+      { label: 'Meio cruel', type: 'increase' },
+      { label: 'Abuso de autoridade ou de poder', type: 'increase' },
+      { label: 'Crime contra ascendente/descendente/cônjuge/companheiro', type: 'increase' },
+      { label: 'Vítima menor de 14 anos / maior de 60 / enfermo / gestante', type: 'increase' },
+
+      // Atenuantes (ex.: CP art. 65)
+      { label: 'Confissão espontânea', type: 'decrease' },
+      { label: 'Menoridade relativa (menos de 21 ao tempo do fato)', type: 'decrease' },
+      { label: 'Maior de 70 anos na data da sentença', type: 'decrease' },
+      { label: 'Reparação do dano / restituição', type: 'decrease' },
+      { label: 'Relevante valor social ou moral', type: 'decrease' },
+      { label: 'Sob violenta emoção (logo após injusta provocação)', type: 'decrease' }
+  ];
+  const phase2FactorByLabel = new Map<string, Phase2FactorOption>(phase2FactorOptions.map((o) => [o.label, o]));
+
+  type Phase3CauseOption = {
+      label: string;
+      type: 'increase' | 'decrease';
+  };
+  const phase3CauseOptions: Phase3CauseOption[] = [
+      // Aumento
+      { label: 'Majorante (ex.: uso de arma, concurso, etc.)', type: 'increase' },
+      { label: 'Concurso de pessoas', type: 'increase' },
+      { label: 'Concurso material / formal / crime continuado', type: 'increase' },
+
+      // Diminuição
+      { label: 'Tentativa (diminuição)', type: 'decrease' },
+      { label: 'Participação de menor importância', type: 'decrease' },
+      { label: 'Arrependimento posterior', type: 'decrease' },
+      { label: 'Privilegiadora (ex.: pequeno valor, etc.)', type: 'decrease' }
+  ];
+  const phase3CauseByLabel = new Map<string, Phase3CauseOption>(phase3CauseOptions.map((o) => [o.label, o]));
   
   let dosiPhase2Ops = $state<Omit<DosimetryOperation, 'result'>[]>([]);
   let dosiPhase3Ops = $state<Omit<DosimetryOperation, 'result'>[]>([]);
@@ -272,7 +315,7 @@ Detração: ${execDetractionDays} dias
   function addDosiOp(phase: 2 | 3) {
       const op: Omit<DosimetryOperation, 'result'> = {
           id: crypto.randomUUID(),
-          name: phase === 2 ? 'Agravante/Atenuante' : 'Causa de Aumento/Diminuição',
+          name: '',
           fractionValue: 1/6,
           fractionLabel: '1/6',
           type: 'increase',
@@ -671,13 +714,27 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                     {#each dosiPhase2Ops as op (op.id)}
                         <div class="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-3">
                             <div class="flex items-center justify-between">
-                                <input
-                                    type="text"
-                                    value={op.name}
-                                    oninput={(e) => updateDosiOp(2, op.id, { name: (e.currentTarget as HTMLInputElement).value })}
-                                    class="bg-transparent text-sm font-medium text-slate-900 border-none p-0 focus:ring-0 w-full"
-                                    placeholder="Nome da Agravante/Atenuante"
-                                />
+                                <div class="w-full">
+                                    <label class="sr-only" for={`p2-name-${op.id}`}>Agravante/Atenuante</label>
+                                    <select
+                                        id={`p2-name-${op.id}`}
+                                        value={op.name}
+                                        onchange={(e) => {
+                                            const label = (e.currentTarget as HTMLSelectElement).value;
+                                            const selected = phase2FactorByLabel.get(label);
+                                            updateDosiOp(2, op.id, {
+                                                name: label,
+                                                ...(selected ? { type: selected.type } : {})
+                                            });
+                                        }}
+                                        class="w-full text-sm font-medium text-slate-900 rounded border-slate-200 py-1"
+                                    >
+                                        <option value="" disabled>Selecione a agravante/atenuante</option>
+                                        {#each phase2FactorOptions as opt}
+                                            <option value={opt.label}>{opt.label}</option>
+                                        {/each}
+                                    </select>
+                                </div>
                                 <button onclick={() => removeDosiOp(2, op.id)} class="text-slate-400 hover:text-red-500" aria-label="Remover operação" title="Remover">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
                                 </button>
@@ -765,13 +822,27 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                     {#each dosiPhase3Ops as op (op.id)}
                         <div class="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-3">
                             <div class="flex items-center justify-between">
-                                <input
-                                    type="text"
-                                    value={op.name}
-                                    oninput={(e) => updateDosiOp(3, op.id, { name: (e.currentTarget as HTMLInputElement).value })}
-                                    class="bg-transparent text-sm font-medium text-slate-900 border-none p-0 focus:ring-0 w-full"
-                                    placeholder="Nome da Causa"
-                                />
+                                <div class="w-full">
+                                    <label class="sr-only" for={`p3-name-${op.id}`}>Causa de Aumento/Diminuição</label>
+                                    <select
+                                        id={`p3-name-${op.id}`}
+                                        value={op.name}
+                                        onchange={(e) => {
+                                            const label = (e.currentTarget as HTMLSelectElement).value;
+                                            const selected = phase3CauseByLabel.get(label);
+                                            updateDosiOp(3, op.id, {
+                                                name: label,
+                                                ...(selected ? { type: selected.type } : {})
+                                            });
+                                        }}
+                                        class="w-full text-sm font-medium text-slate-900 rounded border-slate-200 py-1"
+                                    >
+                                        <option value="" disabled>Selecione a causa</option>
+                                        {#each phase3CauseOptions as opt}
+                                            <option value={opt.label}>{opt.label}</option>
+                                        {/each}
+                                    </select>
+                                </div>
                                 <button onclick={() => removeDosiOp(3, op.id)} class="text-slate-400 hover:text-red-500" aria-label="Remover operação" title="Remover">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
                                 </button>
