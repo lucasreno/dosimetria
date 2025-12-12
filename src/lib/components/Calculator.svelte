@@ -28,6 +28,155 @@
   let activeTab = $state<'execution' | 'fine' | 'remission' | 'dosimetry'>('execution');
   let copied = $state(false);
 
+    const tabOrder = ['execution', 'dosimetry', 'fine', 'remission'] as const;
+    type TabKey = (typeof tabOrder)[number];
+    const tabIndexByKey = new Map<TabKey, number>(tabOrder.map((k, i) => [k, i]));
+    let tabButtons = $state<Record<TabKey, HTMLButtonElement | null>>({
+        execution: null,
+        dosimetry: null,
+        fine: null,
+        remission: null
+    });
+
+    function setActiveTab(next: TabKey) {
+        activeTab = next;
+    }
+
+    function formatISODatePtBR(iso: string): string {
+        if (!iso) return '';
+        const d = new Date(iso + 'T00:00:00');
+        return d.toLocaleDateString('pt-BR');
+    }
+
+    function formatNowPtBR(): string {
+        return new Date().toLocaleString('pt-BR');
+    }
+
+    function buildExecutionReport(): string {
+        const progressionLabel = progressionOptions.find(p => p.value === execProgressionFraction)?.label ?? `${Math.round(execProgressionFraction * 100)}%`;
+        const paroleLabel = fractionOptions.find(f => f.value === execParoleFraction)?.label ?? `${execParoleFraction}`;
+
+        const totalDays = execTotalDays;
+        const deductedDays = execRemissionDays + execDetractionDays;
+        const requiredProgressionDays = Math.ceil(totalDays * execProgressionFraction);
+        const requiredParoleDays = Math.ceil(totalDays * execParoleFraction);
+        const daysToServeProgression = Math.max(0, requiredProgressionDays - deductedDays);
+        const daysToServeParole = Math.max(0, requiredParoleDays - deductedDays);
+        const daysToServeEnd = Math.max(0, totalDays - deductedDays);
+
+        return [
+            'RELATÓRIO - EXECUÇÃO PENAL',
+            `Gerado em: ${formatNowPtBR()}`,
+            '----------------------------------------',
+            `Pena total: ${execYears}a ${execMonths}m ${execDays}d (${totalDays} dias)`,
+            `Data-base: ${formatISODatePtBR(execBaseDate)}`,
+            `Deduções: Remição ${execRemissionDays}d · Detração ${execDetractionDays}d · Total ${deductedDays}d`,
+            '----------------------------------------',
+            `Progressão (${progressionLabel})`,
+            `Requisito: ${requiredProgressionDays}d · A cumprir: ${daysToServeProgression}d`,
+            `Data: ${execProgressionDate.toLocaleDateString('pt-BR')}`,
+            '----------------------------------------',
+            `Livramento Condicional (${paroleLabel})`,
+            `Requisito: ${requiredParoleDays}d · A cumprir: ${daysToServeParole}d`,
+            `Data: ${execParoleDate.toLocaleDateString('pt-BR')}`,
+            '----------------------------------------',
+            'Término de Pena (TCP)',
+            `A cumprir: ${daysToServeEnd}d`,
+            `Data: ${execEndDate.toLocaleDateString('pt-BR')}`
+        ].join('\n');
+    }
+
+    function buildFineReport(): string {
+        const wage = currentWage?.value ?? 0;
+        const fractionLabel = fineFractions.find(f => f.value === fineFractionValue)?.label ?? `${fineFractionValue}`;
+        const unitValue = wage * fineFractionValue;
+        return [
+            'RELATÓRIO - DIAS-MULTA',
+            `Gerado em: ${formatNowPtBR()}`,
+            '----------------------------------------',
+            `Data do fato: ${formatISODatePtBR(fineDate)}`,
+            `Salário mínimo: R$ ${wage.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            `Base legal: ${currentWage?.law ?? 'N/A'}`,
+            '----------------------------------------',
+            `Dias-multa: ${fineDays}`,
+            `Fração: ${fractionLabel}`,
+            `Valor unitário: R$ ${unitValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            `Total: R$ ${fineResult.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        ].join('\n');
+    }
+
+    function buildRemissionReport(): string {
+        const typeLabel = remissionType === 'work' ? 'Trabalho' : 'Estudo';
+        const inputLabel = remissionType === 'work' ? 'Dias trabalhados' : 'Horas de estudo';
+        const ratio = remissionType === 'work' ? '1 dia a cada 3 dias' : '1 dia a cada 12 horas';
+        const calcLine = remissionType === 'work'
+            ? `${remissionInput} ÷ 3 = ${remissionResult}`
+            : `${remissionInput} ÷ 12 = ${remissionResult}`;
+        return [
+            'RELATÓRIO - REMIÇÃO DE PENA',
+            `Gerado em: ${formatNowPtBR()}`,
+            '----------------------------------------',
+            `Tipo: ${typeLabel}`,
+            `${inputLabel}: ${remissionInput}`,
+            `Proporção: ${ratio}`,
+            '----------------------------------------',
+            `Dias remidos: ${remissionResult} dia${remissionResult !== 1 ? 's' : ''}`,
+            `Cálculo: ${calcLine}`
+        ].join('\n');
+    }
+
+    function buildDosimetryReport(): string {
+        const base = { years: dosiBaseYears, months: dosiBaseMonths, days: dosiBaseDays };
+        const phase2Lines = dosiResult.phase2.operations.length
+            ? dosiResult.phase2.operations.map((op, idx) => {
+                    const sign = op.type === 'increase' ? '+' : '-';
+                    const target = op.target === 'base' ? 'Base' : 'Acumulado';
+                    return `${idx + 1}. ${op.name} (${sign}${op.fractionLabel} · ${target}) = ${formatDuration(op.result)}`;
+                })
+            : ['(sem operações)'];
+
+        const phase3Lines = dosiResult.phase3.operations.length
+            ? dosiResult.phase3.operations.map((op, idx) => {
+                    const sign = op.type === 'increase' ? '+' : '-';
+                    const target = op.target === 'base' ? 'Intermediária' : 'Acumulado';
+                    return `${idx + 1}. ${op.name} (${sign}${op.fractionLabel} · ${target}) = ${formatDuration(op.result)}`;
+                })
+            : ['(sem operações)'];
+
+        return [
+            'RELATÓRIO - DOSIMETRIA DA PENA',
+            `Gerado em: ${formatNowPtBR()}`,
+            '----------------------------------------',
+            `1ª fase (pena-base): ${formatDuration(base)}`,
+            '----------------------------------------',
+            '2ª fase (agravantes/atenuantes):',
+            ...phase2Lines,
+            `Parcial (intermediária): ${formatDuration(dosiResult.phase2.result)}`,
+            '----------------------------------------',
+            '3ª fase (causas de aumento/diminuição):',
+            ...phase3Lines,
+            '----------------------------------------',
+            `Pena definitiva: ${formatDuration(dosiResult.phase3.result)}`
+        ].join('\n');
+    }
+
+    function handleTabKeydown(e: KeyboardEvent) {
+        const currentIndex = tabIndexByKey.get(activeTab as TabKey) ?? 0;
+        let nextIndex: number | null = null;
+
+        if (e.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabOrder.length;
+        else if (e.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabOrder.length) % tabOrder.length;
+        else if (e.key === 'Home') nextIndex = 0;
+        else if (e.key === 'End') nextIndex = tabOrder.length - 1;
+
+        if (nextIndex === null) return;
+        e.preventDefault();
+
+        const nextKey = tabOrder[nextIndex];
+        setActiveTab(nextKey);
+        tabButtons[nextKey]?.focus();
+    }
+
   // Execution State (New)
   let execYears = $state(0);
   let execMonths = $state(0);
@@ -62,7 +211,7 @@
       return `CÁLCULO DE EXECUÇÃO PENAL
 ----------------------------------------
 Pena Total: ${execYears} anos, ${execMonths} meses, ${execDays} dias
-Data-Base: ${new Date(execBaseDate).toLocaleDateString('pt-BR')}
+Data-Base: ${formatISODatePtBR(execBaseDate)}
 ----------------------------------------
 Progressão de Regime (${progressionLabel}):
 Data: ${execProgressionDate.toLocaleDateString('pt-BR')}
@@ -152,7 +301,7 @@ Detração: ${execDetractionDays} dias
       
       return `CÁLCULO DE DIAS-MULTA
 ----------------------------------------
-Data do Fato: ${new Date(fineDate).toLocaleDateString('pt-BR')}
+Data do Fato: ${formatISODatePtBR(fineDate)}
 Salário Mínimo: R$ ${wage.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
 Base Legal: ${currentWage?.law ?? 'N/A'}
 ----------------------------------------
@@ -203,13 +352,11 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
   }
 
   function copyToClipboard() {
-    let text = '';
-    if (activeTab === 'execution') text = execMemoryString;
-    else if (activeTab === 'fine') text = fineMemoryString;
-    else if (activeTab === 'remission') text = remissionMemoryString;
-    else if (activeTab === 'dosimetry') {
-        text = `DOSIMETRIA DA PENA\nDefinitiva: ${formatDuration(dosiResult.phase3.result)}`;
-    }
+        let text = '';
+        if (activeTab === 'execution') text = buildExecutionReport();
+        else if (activeTab === 'fine') text = buildFineReport();
+        else if (activeTab === 'remission') text = buildRemissionReport();
+        else if (activeTab === 'dosimetry') text = buildDosimetryReport();
 
     navigator.clipboard.writeText(text);
     copied = true;
@@ -217,9 +364,26 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
       copied = false;
     }, 2000);
   }
+
+    let canCopy = $derived.by(() => {
+        if (activeTab === 'execution') return execTotalDays > 0 && !!execBaseDate;
+        if (activeTab === 'fine') return fineDays > 0 && !!fineDate && ((currentWage?.value ?? 0) > 0);
+        if (activeTab === 'remission') return remissionInput > 0;
+        if (activeTab === 'dosimetry') return toDays({ years: dosiBaseYears, months: dosiBaseMonths, days: dosiBaseDays }) > 0;
+        return false;
+    });
+
+    let copyDisabledReason = $derived.by(() => {
+        if (canCopy) return '';
+        if (activeTab === 'execution') return 'Informe a pena e a data-base para copiar.';
+        if (activeTab === 'fine') return 'Informe a data e os parâmetros da multa para copiar.';
+        if (activeTab === 'remission') return 'Informe dias/horas para copiar.';
+        if (activeTab === 'dosimetry') return 'Informe a pena-base para copiar.';
+        return 'Preencha os dados para copiar.';
+    });
 </script>
 
-<div class="w-full max-w-md mx-auto bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden font-sans">
+<div class="w-full max-w-md md:max-w-2xl mx-auto bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden font-sans">
   <!-- Header -->
   <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
     <div>
@@ -232,18 +396,31 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
   </div>
 
   <!-- Tabs -->
-  <div class="flex border-b border-slate-100">
+    <div class="flex border-b border-slate-100" role="tablist" aria-label="Calculadora penal" tabindex="0" onkeydown={handleTabKeydown}>
       <button
-          onclick={() => activeTab = 'execution'}
+          bind:this={tabButtons.execution}
+          id="tab-execution"
+          role="tab"
+          aria-selected={activeTab === 'execution'}
+          aria-controls="panel-execution"
+          tabindex={activeTab === 'execution' ? 0 : -1}
+          onclick={() => setActiveTab('execution')}
           class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'execution' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
       >
-          Execução Penal
+          <span class="hidden sm:inline">Execução Penal</span>
+          <span class="sm:hidden">Execução</span>
           {#if activeTab === 'execution'}
               <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900"></div>
           {/if}
       </button>
       <button
-          onclick={() => activeTab = 'dosimetry'}
+          bind:this={tabButtons.dosimetry}
+          id="tab-dosimetry"
+          role="tab"
+          aria-selected={activeTab === 'dosimetry'}
+          aria-controls="panel-dosimetry"
+          tabindex={activeTab === 'dosimetry' ? 0 : -1}
+          onclick={() => setActiveTab('dosimetry')}
           class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'dosimetry' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
       >
           Dosimetria
@@ -252,19 +429,33 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
           {/if}
       </button>
       <button
-          onclick={() => activeTab = 'fine'}
+          bind:this={tabButtons.fine}
+          id="tab-fine"
+          role="tab"
+          aria-selected={activeTab === 'fine'}
+          aria-controls="panel-fine"
+          tabindex={activeTab === 'fine' ? 0 : -1}
+          onclick={() => setActiveTab('fine')}
           class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'fine' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
       >
-          Dias-Multa
+          <span class="hidden sm:inline">Dias-Multa</span>
+          <span class="sm:hidden">Multa</span>
           {#if activeTab === 'fine'}
               <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900"></div>
           {/if}
       </button>
       <button
-          onclick={() => activeTab = 'remission'}
+          bind:this={tabButtons.remission}
+          id="tab-remission"
+          role="tab"
+          aria-selected={activeTab === 'remission'}
+          aria-controls="panel-remission"
+          tabindex={activeTab === 'remission' ? 0 : -1}
+          onclick={() => setActiveTab('remission')}
           class={`flex-1 py-3 text-sm font-medium transition-colors relative ${activeTab === 'remission' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
       >
-          Remição (Trabalho/Estudo)
+          <span class="hidden sm:inline">Remição (Trabalho/Estudo)</span>
+          <span class="sm:hidden">Remição</span>
           {#if activeTab === 'remission'}
               <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900"></div>
           {/if}
@@ -273,7 +464,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
 
   <div class="p-6 space-y-6">
     {#if activeTab === 'execution'}
-    <div class="space-y-6">
+    <div id="panel-execution" role="tabpanel" tabindex="0" aria-labelledby="tab-execution" class="space-y-6">
         <!-- Sentence Data -->
         <div class="space-y-3">
             <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">Dados da Pena</h3>
@@ -365,8 +556,24 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
             </div>
         </div>
 
+        {#if execTotalDays <= 0}
+            <div class="rounded-lg bg-amber-50 border border-amber-100 p-4">
+                <div class="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">Atenção</div>
+                <div class="text-sm text-amber-900">Informe a pena (anos/meses/dias) para calcular as datas.</div>
+            </div>
+        {:else}
+        <div class="rounded-lg bg-slate-50 border border-slate-100 p-4">
+            <div class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Resumo</div>
+            <div class="text-sm text-slate-900">
+                Pena total: <span class="font-medium">{execTotalDays} dias</span> · Deduções: <span class="font-medium">{execRemissionDays + execDetractionDays} dias</span>
+            </div>
+            <div class="text-xs text-slate-500 mt-1">
+                Data-base: <span class="font-medium text-slate-700">{formatISODatePtBR(execBaseDate)}</span>
+            </div>
+        </div>
+
         <!-- Results -->
-        <div class="grid grid-cols-1 gap-4 pt-4">
+        <div class="grid grid-cols-1 gap-4 pt-2">
             <!-- Progression Result -->
             <div class="rounded-lg bg-sky-50 border border-sky-100 p-4">
                 <div class="text-xs font-bold text-sky-700 uppercase tracking-wider mb-1">Data para Progressão de Regime</div>
@@ -400,10 +607,11 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                 </div>
             </div>
         </div>
+        {/if}
     </div>
 
     {:else if activeTab === 'dosimetry'}
-    <div class="space-y-6">
+    <div id="panel-dosimetry" role="tabpanel" tabindex="0" aria-labelledby="tab-dosimetry" class="space-y-6">
         <!-- Phase 1 -->
         <div class="space-y-3">
             <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2">1ª Fase - Pena Base</h3>
@@ -440,22 +648,34 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                     {#each dosiPhase2Ops as op (op.id)}
                         <div class="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-3">
                             <div class="flex items-center justify-between">
-                                <input type="text" bind:value={op.name} class="bg-transparent text-sm font-medium text-slate-900 border-none p-0 focus:ring-0 w-full" placeholder="Nome da Agravante/Atenuante" />
-                                <button onclick={() => removeDosiOp(2, op.id)} class="text-slate-400 hover:text-red-500">
+                                <input
+                                    type="text"
+                                    value={op.name}
+                                    oninput={(e) => updateDosiOp(2, op.id, { name: (e.currentTarget as HTMLInputElement).value })}
+                                    class="bg-transparent text-sm font-medium text-slate-900 border-none p-0 focus:ring-0 w-full"
+                                    placeholder="Nome da Agravante/Atenuante"
+                                />
+                                <button onclick={() => removeDosiOp(2, op.id)} class="text-slate-400 hover:text-red-500" aria-label="Remover operação" title="Remover">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
                                 </button>
                             </div>
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label class="text-xs text-slate-500 block mb-1">Tipo</label>
-                                    <select bind:value={op.type} class="w-full text-xs rounded border-slate-200 py-1">
+                                    <label class="text-xs text-slate-500 block mb-1" for={`p2-type-${op.id}`}>Tipo</label>
+                                    <select
+                                        id={`p2-type-${op.id}`}
+                                        value={op.type}
+                                        onchange={(e) => updateDosiOp(2, op.id, { type: (e.currentTarget as HTMLSelectElement).value as any })}
+                                        class="w-full text-xs rounded border-slate-200 py-1"
+                                    >
                                         <option value="increase">Agravante (+)</option>
                                         <option value="decrease">Atenuante (-)</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="text-xs text-slate-500 block mb-1">Fração</label>
+                                    <label class="text-xs text-slate-500 block mb-1" for={`p2-frac-${op.id}`}>Fração</label>
                                     <select 
+                                        id={`p2-frac-${op.id}`}
                                         value={op.fractionValue} 
                                         onchange={(e) => {
                                             const val = parseFloat(e.currentTarget.value);
@@ -471,19 +691,31 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                                     </select>
                                 </div>
                             </div>
-                            <div>
-                                <label class="text-xs text-slate-500 block mb-1">Aplicar sobre</label>
-                                <div class="flex gap-3">
+                            <fieldset>
+                                <legend class="text-xs text-slate-500 block mb-1">Aplicar sobre</legend>
+                                <div class="flex gap-3" role="radiogroup" aria-label="Aplicar sobre">
                                     <label class="flex items-center gap-1 text-xs cursor-pointer">
-                                        <input type="radio" bind:group={op.target} value="base" class="text-slate-900 focus:ring-slate-900" />
+                                        <input
+                                            type="radio"
+                                            name={`p2-target-${op.id}`}
+                                            checked={op.target === 'base'}
+                                            onchange={() => updateDosiOp(2, op.id, { target: 'base' })}
+                                            class="text-slate-900 focus:ring-slate-900"
+                                        />
                                         Pena Base
                                     </label>
                                     <label class="flex items-center gap-1 text-xs cursor-pointer">
-                                        <input type="radio" bind:group={op.target} value="current" class="text-slate-900 focus:ring-slate-900" />
+                                        <input
+                                            type="radio"
+                                            name={`p2-target-${op.id}`}
+                                            checked={op.target === 'current'}
+                                            onchange={() => updateDosiOp(2, op.id, { target: 'current' })}
+                                            class="text-slate-900 focus:ring-slate-900"
+                                        />
                                         Acumulado
                                     </label>
                                 </div>
-                            </div>
+                            </fieldset>
                         </div>
                     {/each}
                 </div>
@@ -510,22 +742,34 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                     {#each dosiPhase3Ops as op (op.id)}
                         <div class="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-3">
                             <div class="flex items-center justify-between">
-                                <input type="text" bind:value={op.name} class="bg-transparent text-sm font-medium text-slate-900 border-none p-0 focus:ring-0 w-full" placeholder="Nome da Causa" />
-                                <button onclick={() => removeDosiOp(3, op.id)} class="text-slate-400 hover:text-red-500">
+                                <input
+                                    type="text"
+                                    value={op.name}
+                                    oninput={(e) => updateDosiOp(3, op.id, { name: (e.currentTarget as HTMLInputElement).value })}
+                                    class="bg-transparent text-sm font-medium text-slate-900 border-none p-0 focus:ring-0 w-full"
+                                    placeholder="Nome da Causa"
+                                />
+                                <button onclick={() => removeDosiOp(3, op.id)} class="text-slate-400 hover:text-red-500" aria-label="Remover operação" title="Remover">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 18 18"/></svg>
                                 </button>
                             </div>
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label class="text-xs text-slate-500 block mb-1">Tipo</label>
-                                    <select bind:value={op.type} class="w-full text-xs rounded border-slate-200 py-1">
+                                    <label class="text-xs text-slate-500 block mb-1" for={`p3-type-${op.id}`}>Tipo</label>
+                                    <select
+                                        id={`p3-type-${op.id}`}
+                                        value={op.type}
+                                        onchange={(e) => updateDosiOp(3, op.id, { type: (e.currentTarget as HTMLSelectElement).value as any })}
+                                        class="w-full text-xs rounded border-slate-200 py-1"
+                                    >
                                         <option value="increase">Aumento (+)</option>
                                         <option value="decrease">Diminuição (-)</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="text-xs text-slate-500 block mb-1">Fração</label>
+                                    <label class="text-xs text-slate-500 block mb-1" for={`p3-frac-${op.id}`}>Fração</label>
                                     <select 
+                                        id={`p3-frac-${op.id}`}
                                         value={op.fractionValue} 
                                         onchange={(e) => {
                                             const val = parseFloat(e.currentTarget.value);
@@ -541,19 +785,31 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
                                     </select>
                                 </div>
                             </div>
-                            <div>
-                                <label class="text-xs text-slate-500 block mb-1">Aplicar sobre</label>
-                                <div class="flex gap-3">
+                            <fieldset>
+                                <legend class="text-xs text-slate-500 block mb-1">Aplicar sobre</legend>
+                                <div class="flex gap-3" role="radiogroup" aria-label="Aplicar sobre">
                                     <label class="flex items-center gap-1 text-xs cursor-pointer">
-                                        <input type="radio" bind:group={op.target} value="base" class="text-slate-900 focus:ring-slate-900" />
+                                        <input
+                                            type="radio"
+                                            name={`p3-target-${op.id}`}
+                                            checked={op.target === 'base'}
+                                            onchange={() => updateDosiOp(3, op.id, { target: 'base' })}
+                                            class="text-slate-900 focus:ring-slate-900"
+                                        />
                                         Pena Intermediária
                                     </label>
                                     <label class="flex items-center gap-1 text-xs cursor-pointer">
-                                        <input type="radio" bind:group={op.target} value="current" class="text-slate-900 focus:ring-slate-900" />
+                                        <input
+                                            type="radio"
+                                            name={`p3-target-${op.id}`}
+                                            checked={op.target === 'current'}
+                                            onchange={() => updateDosiOp(3, op.id, { target: 'current' })}
+                                            class="text-slate-900 focus:ring-slate-900"
+                                        />
                                         Acumulado
                                     </label>
                                 </div>
-                            </div>
+                            </fieldset>
                         </div>
                     {/each}
                 </div>
@@ -573,7 +829,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
     </div>
     {:else if activeTab === 'fine'}
     <!-- Fine Calculator -->
-    <div class="space-y-4">
+    <div id="panel-fine" role="tabpanel" tabindex="0" aria-labelledby="tab-fine" class="space-y-4">
         <div class="space-y-2">
             <label for="fineDate" class="text-sm font-medium text-slate-900">Data do Fato</label>
             <input
@@ -652,7 +908,7 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
     </div>
     {:else}
     <!-- Remission Calculator -->
-    <div class="space-y-4">
+    <div id="panel-remission" role="tabpanel" tabindex="0" aria-labelledby="tab-remission" class="space-y-4">
         <div class="flex gap-4">
             <label class="flex items-center gap-2 cursor-pointer">
                 <input type="radio" name="remissionType" value="work" bind:group={remissionType} class="text-slate-900 focus:ring-slate-900" />
@@ -699,8 +955,11 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
 
     <!-- Actions -->
     <button
-      onclick={copyToClipboard}
-      class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2 w-full active:scale-[0.98]"
+            onclick={() => canCopy && copyToClipboard()}
+            disabled={!canCopy}
+            aria-disabled={!canCopy}
+            title={!canCopy ? copyDisabledReason : 'Copiar relatório'}
+            class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 h-10 px-4 py-2 w-full active:scale-[0.98]"
     >
       {#if copied}
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2 text-emerald-600"><polyline points="20 6 9 17 4 12"/></svg>
@@ -710,6 +969,10 @@ Dias Remidos (Tempo a descontar): ${remissionResult} dias
         <span>Copiar Relatório</span>
       {/if}
     </button>
+
+        {#if !canCopy}
+            <div class="text-xs text-slate-500">{copyDisabledReason}</div>
+        {/if}
   </div>
 </div>
 
